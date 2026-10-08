@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=omawhats
+Comment=Minimalist WhatsApp client
+Exec=omawhats
+Icon=whatsapp
+Terminal=false
+Categories=Network;InstantMessaging;
+StartupWMClass=omawhats
