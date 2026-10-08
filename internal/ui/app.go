@@ -350,6 +350,7 @@ func (u *UI) handleKeys(gtx layout.Context, ready bool) {
 	root := &u.root
 	rk := func(name key.Name) key.Filter { return key.Filter{Focus: root, Name: name, Optional: key.ModShift} }
 	filters := []event.Filter{
+		key.FocusFilter{Target: root},
 		key.Filter{Name: key.NameEscape},
 		key.Filter{Name: "Q", Required: key.ModCtrl},
 		key.Filter{Name: "K", Required: key.ModCtrl},
