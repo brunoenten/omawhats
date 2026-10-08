@@ -125,15 +125,45 @@ func ensureChat(ex execer, k ChatKey) error {
 // chatColumns are the chat columns setChat may write.
 var chatColumns = []string{"name", "unread", "pinned", "muted_until", "archived"}
 
+// setChat updates a column of an existing chat.
 func setChat(ex execer, k ChatKey, col string, v any) error {
 	if !slices.Contains(chatColumns, col) {
 		return fmt.Errorf("unknown chat column %q", col)
 	}
-	if err := ensureChat(ex, k); err != nil {
-		return err
-	}
 	_, err := ex.Exec(`UPDATE chats SET `+col+` = ? WHERE jid = ?`, v, k)
 	return err
+}
+
+// mergeChat moves everything stored under from into to, for a LID chat
+// whose phone number became known.
+func (d *db) mergeChat(from, to ChatKey) error {
+	tx, err := d.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, q := range []string{
+		`INSERT OR IGNORE INTO chats (jid) VALUES (?2)`,
+		`UPDATE chats SET
+			name = CASE WHEN name = '' THEN (SELECT name FROM chats WHERE jid = ?1) ELSE name END,
+			unread = unread + (SELECT unread FROM chats WHERE jid = ?1),
+			preview = CASE WHEN last_ts < (SELECT last_ts FROM chats WHERE jid = ?1)
+				THEN (SELECT preview FROM chats WHERE jid = ?1) ELSE preview END,
+			last_ts = MAX(last_ts, (SELECT last_ts FROM chats WHERE jid = ?1))
+			WHERE jid = ?2`,
+		`UPDATE OR IGNORE messages SET chat = ?2 WHERE chat = ?1`,
+		`UPDATE OR IGNORE reactions SET chat = ?2 WHERE chat = ?1`,
+		`DELETE FROM messages WHERE chat = ?1`,
+		`DELETE FROM reactions WHERE chat = ?1`,
+		`DELETE FROM chats WHERE jid = ?1`,
+		`UPDATE messages SET sender = ?2 WHERE sender = ?1`,
+		`UPDATE reactions SET reactor = ?2 WHERE reactor = ?1`,
+	} {
+		if _, err := tx.Exec(q, from, to); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func bumpChat(ex execer, k ChatKey, ts int64, preview string) error {

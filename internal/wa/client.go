@@ -203,7 +203,10 @@ func (c *Client) handle(evt any) {
 	switch e := evt.(type) {
 	case *events.Connected:
 		c.Store.setOnline(true)
-		go c.syncGroups()
+		go func() {
+			c.mergeLIDs()
+			c.syncGroups()
+		}()
 	case *events.Disconnected:
 		c.Store.setOnline(false)
 	case *events.StreamReplaced:
@@ -253,7 +256,46 @@ func (c *Client) handle(evt any) {
 			c.setChat(c.key(e.JID), "name", e.Name.Name)
 		}
 	case *events.JoinedGroup:
-		c.setChat(c.key(e.JID), "name", e.GroupInfo.Name)
+		if k := c.key(e.JID); k != "" && ensureChat(c.db, k) == nil {
+			c.setChat(k, "name", e.GroupInfo.Name)
+		}
+	}
+}
+
+// mergeLIDs folds chats stored under a LID into the phone-number chat once
+// WhatsApp has told us the mapping, which can arrive after the messages.
+func (c *Client) mergeLIDs() {
+	rows, err := c.db.Query(`SELECT jid FROM chats WHERE jid LIKE '%@` + types.HiddenUserServer + `'`)
+	if err != nil {
+		return
+	}
+	var lids []ChatKey
+	for rows.Next() {
+		var k ChatKey
+		if rows.Scan(&k) == nil {
+			lids = append(lids, k)
+		}
+	}
+	rows.Close()
+	var merged []ChatKey
+	for _, k := range lids {
+		pn := c.norm(k.jid())
+		if pn.Server != types.DefaultUserServer {
+			continue
+		}
+		to := ChatKey(pn.String())
+		if err := c.db.mergeChat(k, to); err != nil {
+			c.Store.SetStatus("merging chats: " + err.Error())
+			continue
+		}
+		merged = append(merged, to)
+	}
+	if len(merged) == 0 {
+		return
+	}
+	c.reloadChats()
+	for _, k := range merged {
+		c.mergeHistory(k, 1, false)
 	}
 }
 

@@ -56,7 +56,7 @@ func (c *Client) onHistory(evt *events.HistorySync) {
 	added := map[ChatKey]int{}
 	for _, conv := range data.GetConversations() {
 		jid, err := types.ParseJID(conv.GetID())
-		if err != nil || skip(jid) {
+		if err != nil || skip(jid) || (len(conv.GetMessages()) == 0 && conv.GetConversationTimestamp() == 0) {
 			continue
 		}
 		if jid.Server == types.HiddenUserServer && conv.GetPnJID() != "" {
@@ -107,6 +107,7 @@ func (c *Client) onHistory(evt *events.HistorySync) {
 		return
 	}
 
+	c.mergeLIDs()
 	c.reloadChats()
 	onDemand := typ == waHistorySync.HistorySync_ON_DEMAND
 	for k, n := range added {

@@ -179,12 +179,13 @@ func (s *Store) SetStatus(msg string) {
 	s.update(func() { s.status, s.statusT = msg, time.Now() })
 }
 
-// Chats returns all unarchived chats, pinned first, then by recency.
+// Chats returns all unarchived chats with any activity, pinned first, then
+// by recency.
 func (s *Store) Chats() []Chat {
 	s.mu.RLock()
 	out := make([]Chat, 0, len(s.chats))
 	for _, c := range s.chats {
-		if !c.Archived {
+		if !c.Archived && (c.LastDate > 0 || c.Pinned) {
 			out = append(out, *c)
 		}
 	}
@@ -234,7 +235,7 @@ func (s *Store) TotalUnread() int {
 	defer s.mu.RUnlock()
 	n := 0
 	for _, c := range s.chats {
-		if !c.Muted() && !c.Archived {
+		if !c.Muted() && !c.Archived && (c.LastDate > 0 || c.Pinned) {
 			n += c.Unread
 		}
 	}
