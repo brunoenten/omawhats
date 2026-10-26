@@ -70,6 +70,11 @@ type UI struct {
 	nameCols int
 	reveal   bool
 
+	// Cache store snapshots so we don't copy chats/messages every frame.
+	storeGen   uint64
+	searchQ    string
+	refreshKey wa.ChatKey
+
 	imgs        *images
 	photoClicks map[string]*widget.Clickable
 	reactClicks map[string]*widget.Clickable
@@ -166,7 +171,12 @@ func (u *UI) frame(gtx layout.Context) {
 	ready := c != nil && auth.State == wa.AuthReady
 
 	if ready {
-		u.refresh()
+		q := u.search.Text()
+		gen := u.store.Gen()
+		if gen != u.storeGen || q != u.searchQ || u.active != u.refreshKey {
+			u.storeGen, u.searchQ, u.refreshKey = gen, q, u.active
+			u.refresh()
+		}
 	}
 	u.handleKeys(gtx, ready)
 
