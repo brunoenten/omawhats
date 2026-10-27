@@ -36,7 +36,10 @@ type Chat struct {
 
 func (c Chat) Group() bool { return c.Key.IsGroup() }
 
-func (c Chat) Muted() bool { return c.MutedUntil > time.Now().Unix() }
+func (c Chat) Muted() bool {
+	// Negative values are WhatsApp's "forever" sentinel; MaxInt64 is ours.
+	return c.MutedUntil != 0 && (c.MutedUntil < 0 || c.MutedUntil > time.Now().Unix())
+}
 
 type Message struct {
 	ID        string

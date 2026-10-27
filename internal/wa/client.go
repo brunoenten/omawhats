@@ -205,6 +205,7 @@ func (c *Client) handle(evt any) {
 		c.Store.setOnline(true)
 		go func() {
 			c.mergeLIDs()
+			c.syncChatSettings()
 			c.syncGroups()
 		}()
 	case *events.Disconnected:
@@ -223,6 +224,8 @@ func (c *Client) handle(evt any) {
 		c.onMessage(e)
 	case *events.HistorySync:
 		c.onHistory(e)
+	case *events.AppStateSyncComplete:
+		go c.syncChatSettings()
 	case *events.Receipt:
 		if e.IsFromMe && (e.Type == types.ReceiptTypeRead || e.Type == types.ReceiptTypeReadSelf) {
 			c.setChat(c.key(e.Chat), "unread", 0)
@@ -301,6 +304,12 @@ func (c *Client) mergeLIDs() {
 
 func (c *Client) setChat(k ChatKey, col string, v any) {
 	if k == "" || c.db == nil {
+		return
+	}
+	// Mute/pin/archive can arrive before the chat row exists (app-state
+	// sync before history). Create it so the UPDATE is not a no-op.
+	if err := ensureChat(c.db, k); err != nil {
+		c.Store.SetStatus("saving chat: " + err.Error())
 		return
 	}
 	if err := setChat(c.db, k, col, v); err != nil {
@@ -482,6 +491,45 @@ func (c *Client) fetchGroupName(k ChatKey) {
 			c.setChat(k, "name", info.Name)
 		}
 	}()
+}
+
+// syncChatSettings copies mute/pin/archive from whatsmeow's chat settings
+// into our message store. Mute is the client's job: WhatsApp does not
+// suppress muted notifications for companion devices.
+func (c *Client) syncChatSettings() {
+	cli, ok := c.connected()
+	if !ok || c.db == nil || cli.Store.ChatSettings == nil {
+		return
+	}
+	rows, err := c.db.chats()
+	if err != nil {
+		return
+	}
+	changed := false
+	for _, r := range rows {
+		cs, err := cli.Store.ChatSettings.GetChatSettings(c.ctx, r.key.jid())
+		if err != nil || !cs.Found {
+			continue
+		}
+		until := int64(0)
+		if !cs.MutedUntil.IsZero() {
+			until = cs.MutedUntil.Unix()
+			if until < 0 || cs.MutedUntil.Year() >= 9999 {
+				until = math.MaxInt64
+			}
+		}
+		pinned, archived := cs.Pinned, cs.Archived
+		if r.muted == until && r.pinned == pinned && r.archived == archived {
+			continue
+		}
+		_ = setChat(c.db, r.key, "muted_until", until)
+		_ = setChat(c.db, r.key, "pinned", pinned)
+		_ = setChat(c.db, r.key, "archived", archived)
+		changed = true
+	}
+	if changed {
+		c.reloadChats()
+	}
 }
 
 // syncGroups refreshes the names of the groups we already have chats for.
