@@ -37,6 +37,10 @@ CREATE TABLE IF NOT EXISTS messages (
 	photo_h    INTEGER NOT NULL DEFAULT 0,
 	thumb      BLOB,
 	media      BLOB,
+	media_kind TEXT NOT NULL DEFAULT '',
+	file_name  TEXT NOT NULL DEFAULT '',
+	file_mime  TEXT NOT NULL DEFAULT '',
+	file_label TEXT NOT NULL DEFAULT '',
 	PRIMARY KEY (chat, id)
 );
 CREATE INDEX IF NOT EXISTS messages_ts ON messages (chat, ts, id);
@@ -49,6 +53,14 @@ CREATE TABLE IF NOT EXISTS reactions (
 	PRIMARY KEY (chat, msg, reactor)
 );
 `
+
+// migrate adds columns introduced after the initial schema.
+var migrations = []string{
+	`ALTER TABLE messages ADD COLUMN media_kind TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE messages ADD COLUMN file_name TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE messages ADD COLUMN file_mime TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE messages ADD COLUMN file_label TEXT NOT NULL DEFAULT ''`,
+}
 
 type db struct{ *sql.DB }
 
@@ -67,6 +79,12 @@ func openDB(path string) (*db, error) {
 	if _, err := d.Exec(schema); err != nil {
 		d.Close()
 		return nil, err
+	}
+	for _, q := range migrations {
+		if _, err := d.Exec(q); err != nil && !strings.Contains(err.Error(), "duplicate column") {
+			d.Close()
+			return nil, err
+		}
 	}
 	return &db{d}, nil
 }
@@ -180,13 +198,21 @@ func addUnread(ex execer, k ChatKey) error {
 func insertMessage(ex execer, m Message) (bool, error) {
 	var w, h int
 	var thumb, media []byte
-	if p := m.Photo; p != nil {
-		w, h, thumb, media = p.W, p.H, p.Thumb, p.media
+	var kind, name, mime, label string
+	switch {
+	case m.Photo != nil:
+		p := m.Photo
+		kind, w, h, thumb, media = "image", p.W, p.H, p.Thumb, p.media
+	case m.File != nil:
+		f := m.File
+		kind, name, mime, label, media = f.Kind, f.Name, f.Mime, f.Label, f.media
 	}
 	res, err := ex.Exec(`INSERT OR IGNORE INTO messages
-		(chat, id, sender, sender_jid, from_me, ts, text, reply_to, edited, service, photo_w, photo_h, thumb, media)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		m.Peer, m.ID, m.SenderID, m.senderJID, m.Out, m.Date.Unix(), m.Text, m.ReplyTo, m.Edited, m.Service, w, h, thumb, media)
+		(chat, id, sender, sender_jid, from_me, ts, text, reply_to, edited, service,
+		 photo_w, photo_h, thumb, media, media_kind, file_name, file_mime, file_label)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		m.Peer, m.ID, m.SenderID, m.senderJID, m.Out, m.Date.Unix(), m.Text, m.ReplyTo, m.Edited, m.Service,
+		w, h, thumb, media, kind, name, mime, label)
 	if err != nil {
 		return false, err
 	}
@@ -201,7 +227,9 @@ func editMessage(ex execer, k ChatKey, id, text string) error {
 
 func revokeMessage(ex execer, k ChatKey, id string) error {
 	_, err := ex.Exec(`UPDATE messages SET text = 'deleted this message', service = 1, reply_to = '',
-		photo_w = 0, photo_h = 0, thumb = NULL, media = NULL WHERE chat = ? AND id = ?`, k, id)
+		photo_w = 0, photo_h = 0, thumb = NULL, media = NULL,
+		media_kind = '', file_name = '', file_mime = '', file_label = ''
+		WHERE chat = ? AND id = ?`, k, id)
 	if err == nil {
 		_, err = ex.Exec(`DELETE FROM reactions WHERE chat = ? AND msg = ?`, k, id)
 	}
@@ -219,7 +247,8 @@ func setReaction(ex execer, k ChatKey, msg, reactor, emoji string, mine bool) er
 	return err
 }
 
-const msgCols = `id, sender, sender_jid, from_me, ts, text, reply_to, edited, service, photo_w, photo_h, thumb, media`
+const msgCols = `id, sender, sender_jid, from_me, ts, text, reply_to, edited, service,
+	photo_w, photo_h, thumb, media, media_kind, file_name, file_mime, file_label`
 
 func scanMessages(k ChatKey, rows *sql.Rows) ([]Message, error) {
 	defer rows.Close()
@@ -229,13 +258,19 @@ func scanMessages(k ChatKey, rows *sql.Rows) ([]Message, error) {
 		var ts int64
 		var w, h int
 		var thumb, media []byte
+		var kind, name, mime, label string
 		if err := rows.Scan(&m.ID, &m.SenderID, &m.senderJID, &m.Out, &ts, &m.Text, &m.ReplyTo,
-			&m.Edited, &m.Service, &w, &h, &thumb, &media); err != nil {
+			&m.Edited, &m.Service, &w, &h, &thumb, &media, &kind, &name, &mime, &label); err != nil {
 			return nil, err
 		}
 		m.Date = time.Unix(ts, 0)
 		if media != nil {
-			m.Photo = &Photo{ID: m.ID, W: w, H: h, Thumb: thumb, media: media}
+			switch kind {
+			case "", "image":
+				m.Photo = &Photo{ID: m.ID, W: w, H: h, Thumb: thumb, media: media}
+			default:
+				m.File = &File{ID: m.ID, Kind: kind, Name: name, Mime: mime, Label: label, media: media}
+			}
 		}
 		out = append(out, m)
 	}

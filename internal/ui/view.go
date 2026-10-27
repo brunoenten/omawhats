@@ -384,6 +384,12 @@ func (u *UI) messageRow(gtx layout.Context, it item) layout.Dimensions {
 				return u.photo(gtx, m)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+				if m.File == nil {
+					return layout.Dimensions{}
+				}
+				return u.fileRow(gtx, m)
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 				switch {
 				case m.Service:
 					return u.label(gtx, m.Sender+" "+m.Text, th.FgDim)
@@ -516,7 +522,7 @@ func (u *UI) mode(gtx layout.Context) string {
 
 var hints = map[string]string{
 	"CHATS":    "j/k move  enter open  / search  tab messages  ^q quit",
-	"MESSAGES": "j/k select  r reply  e edit  + react  o open  y copy  i write  h chats",
+	"MESSAGES": "j/k select  r reply  e edit  + react  o open media  y copy  i write  h chats",
 	"REACT":    "1-8 pick  h/l move  enter pick  esc cancel",
 	"INSERT":   "enter send  shift+enter newline  esc normal",
 	"SEARCH":   "type to filter  enter open  esc cancel",
@@ -611,6 +617,21 @@ func (u *UI) layoutLogin(gtx layout.Context, a wa.Auth) {
 
 // photo draws an inline photo, scaled to fit the text column. Until the full
 // image arrives it shows the embedded thumbnail, or a same-sized placeholder.
+func (u *UI) fileRow(gtx layout.Context, m wa.Message) layout.Dimensions {
+	f := m.File
+	click := u.fileClicks[m.ID]
+	if click == nil {
+		click = new(widget.Clickable)
+		u.fileClicks[m.ID] = click
+	}
+	if click.Clicked(gtx) {
+		u.openFile(f)
+	}
+	return click.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		return u.line(gtx, f.Label, u.th.Cyan)
+	})
+}
+
 func (u *UI) photo(gtx layout.Context, m wa.Message) layout.Dimensions {
 	th, p := u.th, m.Photo
 	maxW := float32(min(gtx.Constraints.Max.X, 52*u.charW))

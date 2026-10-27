@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -159,11 +160,78 @@ func (im *images) open(c *wa.Client, p *wa.Photo, status func(string)) {
 			status("photo: " + err.Error())
 			return
 		}
-		cmd := exec.Command("xdg-open", path)
-		if err := cmd.Start(); err != nil {
-			status("xdg-open: " + err.Error())
+		xdgOpen(path, status)
+	}()
+}
+
+// files downloads and caches non-image attachments.
+type files struct {
+	mu         sync.Mutex
+	sem        chan struct{}
+	dir        string
+	invalidate func()
+}
+
+func newFiles(dir string, invalidate func()) *files {
+	return &files{
+		sem:        make(chan struct{}, maxDownloads),
+		dir:        dir,
+		invalidate: invalidate,
+	}
+}
+
+func (fs *files) path(f *wa.File) string {
+	h := fnv.New64a()
+	h.Write([]byte(f.ID))
+	name := sanitizeName(f.Name)
+	return filepath.Join(fs.dir, fmt.Sprintf("%016x_%s", h.Sum64(), name))
+}
+
+func sanitizeName(name string) string {
+	name = filepath.Base(name)
+	name = strings.Map(func(r rune) rune {
+		switch {
+		case r < 32, strings.ContainsRune(`<>:"/\|?*`, r):
+			return '_'
+		}
+		return r
+	}, name)
+	if name == "" || name == "." || name == ".." {
+		return "file"
+	}
+	return name
+}
+
+func (fs *files) fetch(c *wa.Client, f *wa.File) (string, error) {
+	path := fs.path(f)
+	if _, err := os.Stat(path); err == nil {
+		return path, nil
+	}
+	if err := os.MkdirAll(fs.dir, 0o700); err != nil {
+		return "", err
+	}
+	fs.sem <- struct{}{}
+	defer func() { <-fs.sem }()
+	return path, c.DownloadFile(*f, path)
+}
+
+func (fs *files) open(c *wa.Client, f *wa.File, status func(string)) {
+	status("opening " + f.Label + "…")
+	go func() {
+		path, err := fs.fetch(c, f)
+		if err != nil {
+			status("file: " + err.Error())
 			return
 		}
-		go cmd.Wait()
+		xdgOpen(path, status)
 	}()
+}
+
+func xdgOpen(path string, status func(string)) {
+	cmd := exec.Command("xdg-open", path)
+	if err := cmd.Start(); err != nil {
+		status("xdg-open: " + err.Error())
+		return
+	}
+	go cmd.Wait()
 }

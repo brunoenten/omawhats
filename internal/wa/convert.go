@@ -68,12 +68,14 @@ func (c *Client) apply(ex execer, evt *events.Message, live bool) (effect, bool,
 		m.Text = textOf(msg)
 		if img := msg.GetImageMessage(); img != nil {
 			m.Photo = photoOf(m.ID, img)
+		} else if f := fileOf(m.ID, msg); f != nil {
+			m.File = f
 		} else if label := mediaLabel(msg); label != "" {
 			m.Text = strings.TrimSpace(label + " " + m.Text)
 		}
 		m.ReplyTo = contextOf(msg).GetStanzaID()
 	}
-	if m.Text == "" && m.Photo == nil {
+	if m.Text == "" && m.Photo == nil && m.File == nil {
 		return effect{}, false, nil
 	}
 
@@ -210,6 +212,89 @@ func photoOf(id string, img *waE2E.ImageMessage) *Photo {
 		return nil
 	}
 	return &Photo{ID: id, W: int(img.GetWidth()), H: int(img.GetHeight()), Thumb: img.GetJPEGThumbnail(), media: media}
+}
+
+// fileOf extracts a downloadable non-image attachment, or nil.
+func fileOf(id string, msg *waE2E.Message) *File {
+	label := mediaLabel(msg)
+	if label == "" {
+		return nil
+	}
+	switch {
+	case msg.GetDocumentMessage() != nil:
+		d := msg.GetDocumentMessage()
+		media, err := proto.Marshal(d)
+		if err != nil {
+			return nil
+		}
+		name := d.GetFileName()
+		if name == "" {
+			name = d.GetTitle()
+		}
+		if name == "" {
+			name = "document"
+		}
+		return &File{ID: id, Kind: "document", Name: name, Mime: d.GetMimetype(), Label: label, media: media}
+	case msg.GetVideoMessage() != nil:
+		v := msg.GetVideoMessage()
+		media, err := proto.Marshal(v)
+		if err != nil {
+			return nil
+		}
+		return &File{ID: id, Kind: "video", Name: "video" + extFor(v.GetMimetype(), ".mp4"), Mime: v.GetMimetype(), Label: label, media: media}
+	case msg.GetPtvMessage() != nil:
+		v := msg.GetPtvMessage()
+		media, err := proto.Marshal(v)
+		if err != nil {
+			return nil
+		}
+		return &File{ID: id, Kind: "ptv", Name: "video-note" + extFor(v.GetMimetype(), ".mp4"), Mime: v.GetMimetype(), Label: label, media: media}
+	case msg.GetAudioMessage() != nil:
+		a := msg.GetAudioMessage()
+		media, err := proto.Marshal(a)
+		if err != nil {
+			return nil
+		}
+		base := "audio"
+		if a.GetPTT() {
+			base = "voice"
+		}
+		return &File{ID: id, Kind: "audio", Name: base + extFor(a.GetMimetype(), ".ogg"), Mime: a.GetMimetype(), Label: label, media: media}
+	case msg.GetStickerMessage() != nil:
+		s := msg.GetStickerMessage()
+		media, err := proto.Marshal(s)
+		if err != nil {
+			return nil
+		}
+		return &File{ID: id, Kind: "sticker", Name: "sticker" + extFor(s.GetMimetype(), ".webp"), Mime: s.GetMimetype(), Label: label, media: media}
+	}
+	return nil
+}
+
+func extFor(mime, fallback string) string {
+	switch {
+	case strings.Contains(mime, "jpeg"), strings.Contains(mime, "jpg"):
+		return ".jpg"
+	case strings.Contains(mime, "png"):
+		return ".png"
+	case strings.Contains(mime, "webp"):
+		return ".webp"
+	case strings.Contains(mime, "gif"):
+		return ".gif"
+	case strings.Contains(mime, "mp4"):
+		return ".mp4"
+	case strings.Contains(mime, "webm"):
+		return ".webm"
+	case strings.Contains(mime, "ogg"):
+		return ".ogg"
+	case strings.Contains(mime, "mpeg"), strings.Contains(mime, "mp3"):
+		return ".mp3"
+	case strings.Contains(mime, "pdf"):
+		return ".pdf"
+	case strings.Contains(mime, "zip"):
+		return ".zip"
+	}
+	return fallback
 }
 
 // stubText describes a history system message, or returns "" to drop it.

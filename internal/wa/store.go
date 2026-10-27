@@ -53,6 +53,7 @@ type Message struct {
 	Edited    bool
 	Service   bool
 	Photo     *Photo
+	File      *File
 	Reactions []Reaction
 
 	// senderJID is the sender as addressed on the wire, which message keys
@@ -69,6 +70,16 @@ type Photo struct {
 	media []byte
 }
 
+// File is a downloadable non-image attachment (document, audio, video, sticker).
+type File struct {
+	ID    string
+	Kind  string // document, audio, video, sticker, ptv
+	Name  string // suggested filename
+	Mime  string
+	Label string // bracketed UI label, e.g. "[file report.pdf]"
+	media []byte
+}
+
 type Reaction struct {
 	Emoji string
 	Count int
@@ -77,13 +88,19 @@ type Reaction struct {
 
 // Summary is a one-line, text-only rendering of the message.
 func (m Message) Summary() string {
-	if m.Photo == nil {
-		return m.Text
+	switch {
+	case m.Photo != nil:
+		if m.Text == "" {
+			return "[photo]"
+		}
+		return "[photo] " + m.Text
+	case m.File != nil:
+		if m.Text == "" {
+			return m.File.Label
+		}
+		return m.File.Label + " " + m.Text
 	}
-	if m.Text == "" {
-		return "[photo]"
-	}
-	return "[photo] " + m.Text
+	return m.Text
 }
 
 func less(a, b Message) bool {

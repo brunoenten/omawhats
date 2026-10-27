@@ -76,7 +76,9 @@ type UI struct {
 	refreshKey wa.ChatKey
 
 	imgs        *images
+	files       *files
 	photoClicks map[string]*widget.Clickable
+	fileClicks  map[string]*widget.Clickable
 	linkClicks  map[string]*widget.Clickable
 	reactClicks map[string]*widget.Clickable
 	rowTags     map[string]*rowTag
@@ -104,7 +106,9 @@ func Run(cfg config.Config) error {
 	u.activeK.Store(wa.ChatKey(""))
 	u.store = wa.NewStore(w.Invalidate)
 	u.imgs = newImages(filepath.Join(config.CacheDir(), "photos"), w.Invalidate)
+	u.files = newFiles(filepath.Join(config.CacheDir(), "files"), w.Invalidate)
 	u.photoClicks = map[string]*widget.Clickable{}
+	u.fileClicks = map[string]*widget.Clickable{}
 	u.linkClicks = map[string]*widget.Clickable{}
 	u.reactClicks = map[string]*widget.Clickable{}
 	u.rowTags = map[string]*rowTag{}
@@ -272,6 +276,7 @@ func (u *UI) open(k wa.ChatKey) {
 	u.activeK.Store(k)
 	u.selMsg, u.replyTo, u.editing = "", "", ""
 	clear(u.photoClicks)
+	clear(u.fileClicks)
 	clear(u.linkClicks)
 	clear(u.reactClicks)
 	clear(u.rowTags)
@@ -520,8 +525,8 @@ func (u *UI) onKey(gtx layout.Context, e key.Event, ready bool) {
 			u.openPicker(m.ID)
 		}
 	case "O":
-		if m, ok := u.selected(); ok && m.Photo != nil {
-			u.openPhoto(m.Photo)
+		if m, ok := u.selected(); ok {
+			u.openMedia(m)
 		}
 	case "Y":
 		if m, ok := u.selected(); ok {
@@ -536,5 +541,20 @@ func (u *UI) onKey(gtx layout.Context, e key.Event, ready bool) {
 func (u *UI) openPhoto(p *wa.Photo) {
 	if c := u.client.Load(); c != nil {
 		u.imgs.open(c, p, u.store.SetStatus)
+	}
+}
+
+func (u *UI) openFile(f *wa.File) {
+	if c := u.client.Load(); c != nil {
+		u.files.open(c, f, u.store.SetStatus)
+	}
+}
+
+func (u *UI) openMedia(m wa.Message) {
+	switch {
+	case m.Photo != nil:
+		u.openPhoto(m.Photo)
+	case m.File != nil:
+		u.openFile(m.File)
 	}
 }

@@ -176,7 +176,24 @@ func (c *Client) DownloadPhoto(p Photo, path string) error {
 	if err := proto.Unmarshal(p.media, &img); err != nil {
 		return err
 	}
-	data, err := cli.Download(c.ctx, &img)
+	return c.writeDownload(path, func() ([]byte, error) { return cli.Download(c.ctx, &img) })
+}
+
+// DownloadFile saves a document/audio/video/sticker attachment to path.
+func (c *Client) DownloadFile(f File, path string) error {
+	cli, ok := c.connected()
+	if !ok {
+		return errOffline
+	}
+	msg, err := downloadable(f)
+	if err != nil {
+		return err
+	}
+	return c.writeDownload(path, func() ([]byte, error) { return cli.Download(c.ctx, msg) })
+}
+
+func (c *Client) writeDownload(path string, fetch func() ([]byte, error)) error {
+	data, err := fetch()
 	if err != nil {
 		return err
 	}
@@ -185,4 +202,23 @@ func (c *Client) DownloadPhoto(p Photo, path string) error {
 		return err
 	}
 	return os.Rename(tmp, path)
+}
+
+func downloadable(f File) (whatsmeow.DownloadableMessage, error) {
+	switch f.Kind {
+	case "document":
+		var m waE2E.DocumentMessage
+		return &m, proto.Unmarshal(f.media, &m)
+	case "video", "ptv":
+		var m waE2E.VideoMessage
+		return &m, proto.Unmarshal(f.media, &m)
+	case "audio":
+		var m waE2E.AudioMessage
+		return &m, proto.Unmarshal(f.media, &m)
+	case "sticker":
+		var m waE2E.StickerMessage
+		return &m, proto.Unmarshal(f.media, &m)
+	default:
+		return nil, errors.New("unknown media kind " + f.Kind)
+	}
 }
