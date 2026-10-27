@@ -77,6 +77,7 @@ type UI struct {
 
 	imgs        *images
 	photoClicks map[string]*widget.Clickable
+	linkClicks  map[string]*widget.Clickable
 	reactClicks map[string]*widget.Clickable
 	rowTags     map[string]*rowTag
 	pickClicks  [8]widget.Clickable
@@ -104,6 +105,7 @@ func Run(cfg config.Config) error {
 	u.store = wa.NewStore(w.Invalidate)
 	u.imgs = newImages(filepath.Join(config.CacheDir(), "photos"), w.Invalidate)
 	u.photoClicks = map[string]*widget.Clickable{}
+	u.linkClicks = map[string]*widget.Clickable{}
 	u.reactClicks = map[string]*widget.Clickable{}
 	u.rowTags = map[string]*rowTag{}
 	shaper := text.NewShaper(text.WithCollection(gofont.Collection()))
@@ -270,6 +272,7 @@ func (u *UI) open(k wa.ChatKey) {
 	u.activeK.Store(k)
 	u.selMsg, u.replyTo, u.editing = "", "", ""
 	clear(u.photoClicks)
+	clear(u.linkClicks)
 	clear(u.reactClicks)
 	clear(u.rowTags)
 	u.picker = ""

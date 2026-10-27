@@ -390,7 +390,7 @@ func (u *UI) messageRow(gtx layout.Context, it item) layout.Dimensions {
 				case m.Text == "":
 					return layout.Dimensions{}
 				}
-				return u.label(gtx, m.Text, textC)
+				return u.linkLabel(gtx, m.ID, m.Text, textC)
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions { return u.reactions(gtx, m) }),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
