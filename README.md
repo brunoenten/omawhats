@@ -26,7 +26,7 @@ your active Omarchy theme. It is the WhatsApp sibling of omagram.
 - Follows `omarchy theme set` without restarting
 - Uses your system monospace font, with fallbacks for symbols and color emoji
 
-Photos are shown inline: the embedded thumbnail first, then the full image (`o` or a click opens it in your image viewer). Documents, audio, video and stickers show as cyan labels (`[file report.pdf]`, `[voice 0:12]`); `o` or a click downloads them and opens with `xdg-open`.
+Photos are shown inline: the embedded thumbnail first, then the full image (`o` or a click opens it in your image viewer). Documents, audio, video and stickers show as cyan labels (`[file report.pdf]`, `[voice 0:12]`); `o` or a click downloads them and opens with `xdg-open`. Press `a` to attach a file (zenity picker): images send as photos, everything else as a document; composer text becomes the caption.
 
 whatsmeow is an unofficial client library. Linking it to your account is the
 same mechanism WhatsApp Web uses, but WhatsApp may restrict accounts that use
@@ -71,7 +71,7 @@ cached in `~/.cache/omawhats/photos` and `~/.cache/omawhats/files`.
 | Context  | Keys |
 |----------|------|
 | Chats    | `j`/`k` move · `g`/`G` top/bottom · `enter` open · `/` search · `tab` messages |
-| Messages | `j`/`k` select · `r` reply · `e` edit · `+` react · `o` open media · `y` copy · `i` write · `h` back |
+| Messages | `j`/`k` select · `r` reply · `e` edit · `+` react · `o` open · `a` attach · `y` copy · `i` write · `h` back |
 | Reacting | `1`–`8` pick · `h`/`l` move · `enter` pick · `esc` cancel |
 | Writing  | `enter` send · `shift+enter` newline · `esc` cancel / back |
 | Global   | `ctrl+k` search · `ctrl+=`/`ctrl+-`/`ctrl+0` font size · `ctrl+q` quit |

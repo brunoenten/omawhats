@@ -61,8 +61,8 @@ func (c *Client) Edit(k ChatKey, id, text string) {
 		return
 	case !found || !m.Out:
 		return
-	case m.Photo != nil:
-		c.Store.SetStatus("edit: photo captions can't be edited")
+	case m.Photo != nil || m.File != nil:
+		c.Store.SetStatus("edit: media captions can't be edited")
 		return
 	case time.Since(m.Date) > whatsmeow.EditWindow:
 		c.Store.SetStatus("edit: too old to edit")

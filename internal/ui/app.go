@@ -29,8 +29,8 @@ import (
 
 	"github.com/brunoenten/omawhats/internal/config"
 	"github.com/brunoenten/omawhats/internal/notify"
-	"github.com/brunoenten/omawhats/internal/wa"
 	"github.com/brunoenten/omawhats/internal/theme"
+	"github.com/brunoenten/omawhats/internal/wa"
 )
 
 type nav int
@@ -49,8 +49,10 @@ type UI struct {
 	client atomic.Pointer[wa.Client]
 	cancel context.CancelFunc
 
-	focused atomic.Bool
-	activeK atomic.Value // wa.ChatKey
+	focused      atomic.Bool
+	picking      atomic.Bool
+	pendingClear atomic.Bool  // clear composer after a successful attach
+	activeK      atomic.Value // wa.ChatKey
 
 	root      int
 	nav       nav
@@ -171,6 +173,12 @@ func (u *UI) frame(gtx layout.Context) {
 	event.Op(gtx.Ops, &u.root)
 	area.Pop()
 	u.measure(gtx)
+
+	if u.pendingClear.Swap(false) {
+		u.composer.SetText("")
+		u.drafts[u.active] = ""
+		u.replyTo, u.selMsg = "", ""
+	}
 
 	c := u.client.Load()
 	auth := u.store.Auth()
@@ -378,7 +386,7 @@ func (u *UI) handleKeys(gtx layout.Context, ready bool) {
 		key.Filter{Name: "0", Required: key.ModCtrl},
 	}
 	if ready {
-		for _, n := range []key.Name{"J", "K", "G", "H", "L", "I", "R", "E", "Y", "O", "/", "+", "=",
+		for _, n := range []key.Name{"J", "K", "G", "H", "L", "I", "R", "E", "Y", "O", "A", "/", "+", "=",
 			"1", "2", "3", "4", "5", "6", "7", "8",
 			key.NameReturn, key.NameEnter, key.NameUpArrow, key.NameDownArrow, key.NameLeftArrow,
 			key.NameRightArrow, key.NameTab, key.NamePageUp, key.NamePageDown} {
@@ -528,6 +536,8 @@ func (u *UI) onKey(gtx layout.Context, e key.Event, ready bool) {
 		if m, ok := u.selected(); ok {
 			u.openMedia(m)
 		}
+	case "A":
+		u.attach()
 	case "Y":
 		if m, ok := u.selected(); ok {
 			gtx.Execute(clipboard.WriteCmd{Type: "application/text", Data: io.NopCloser(strings.NewReader(m.Text))})

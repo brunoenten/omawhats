@@ -522,7 +522,7 @@ func (u *UI) mode(gtx layout.Context) string {
 
 var hints = map[string]string{
 	"CHATS":    "j/k move  enter open  / search  tab messages  ^q quit",
-	"MESSAGES": "j/k select  r reply  e edit  + react  o open media  y copy  i write  h chats",
+	"MESSAGES": "j/k select  r reply  e edit  + react  o open  a attach  y copy  i write  h chats",
 	"REACT":    "1-8 pick  h/l move  enter pick  esc cancel",
 	"INSERT":   "enter send  shift+enter newline  esc normal",
 	"SEARCH":   "type to filter  enter open  esc cancel",
